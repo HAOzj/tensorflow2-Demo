@@ -212,9 +212,9 @@ def trans_dir_to_tfrecord(
     # manager = Manager()
     # cnt_sample = manager.Value("i", 0)
     process_pool = Pool(8)  # define 8 process to execute this task
-    import time
-    start_time = time.time()
-    record = []
+    # import time
+    # start_time = time.time()
+    # record = []
     print("---start processing click sequence---")
     for file in os.listdir(json_dir):
         json_file = os.path.join(json_dir, file)

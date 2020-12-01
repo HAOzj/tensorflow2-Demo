@@ -40,15 +40,16 @@ def parse_tfrecords(serialized_example):
     return res
 
 
-def load_data(tfrecord_dir, user_max_len, item_max_len, n_epoch, batch_size, buffer_size, test_ratio, val_ratio):
+def load_data(tfrecord_dir, user_max_len, item_max_len, batch_size, test_ratio, val_ratio, strict_flag=False):
     """从tfrecord文件中解析样例,生成训练集,测试集和预测集
 
-    :param tfrecord_dir:
-    :param user_max_len:
-    :param item_max_len:
-    :param n_epoch:
-    :param batch_size:
-    :param buffer_size:
+    :param tfrecord_dir, path, TFRecord文件所在的文件夹
+    :param user_max_len, int, 用户行为序列的最大长度
+    :param item_max_len, int, 物品序列的最大长度
+    :param batch_size, int
+    :param test_ratio, float, 测试集的占比
+    :param val_ratio, float, 发展集的占比
+    :param strict_flag, bool, 是否把数据集全部shuffle后分割.对于大数据量,建议为False
     :return:
     """
     padded_shapes = {"user_feature": [user_max_len], "item_feature": [item_max_len], "label": [1]}
@@ -56,28 +57,49 @@ def load_data(tfrecord_dir, user_max_len, item_max_len, n_epoch, batch_size, buf
     for file in os.listdir(tfrecord_dir):
         tf_file = os.path.join(tfrecord_dir, file)
         filenames.append(tf_file)
-    filenames = tf.convert_to_tensor(filenames, dtype=tf.string)
 
-    dataset = tf.data.TFRecordDataset(filenames).map(parse_tfrecords)
+    # 全部数据随机来切分数据集
+    if strict_flag:
+        filenames = tf.convert_to_tensor(filenames, dtype=tf.string)
 
-    # 获得sample size
-    sample_size = 0
-    for _ in dataset:
-        sample_size += 1
-    print("------sample size=", sample_size)
+        dataset = tf.data.TFRecordDataset(filenames).map(parse_tfrecords)
 
-    dataset = dataset.shuffle(sample_size)\
-        .padded_batch(batch_size=batch_size, padded_shapes=padded_shapes, drop_remainder=False)
+        # 获得sample size
+        sample_size = 0
+        for _ in dataset:
+            sample_size += 1
+        print("------sample size=", sample_size)
 
-    sample_size = int(sample_size / batch_size)
+        dataset = dataset.shuffle(sample_size)\
+            .padded_batch(batch_size=batch_size, padded_shapes=padded_shapes, drop_remainder=False)
 
-    test_size = int(sample_size * test_ratio)
-    val_size = int(sample_size * val_ratio)
-    test_data = dataset.take(test_size)
-    res_data = dataset.skip(test_size)
-    val_data = res_data.take(val_size)
-    train_data = res_data.skip(val_size)\
-        .repeat(n_epoch)\
-        .shuffle(buffer_size=buffer_size)
+        sample_size = int(sample_size / batch_size)
+        print(f"------in total, we have {sample_size} batches, each made up of {batch_size} samples")
+        test_size = int(sample_size * test_ratio)
+        val_size = int(sample_size * val_ratio)
+        test_data = dataset.take(test_size)
+        res_data = dataset.skip(test_size)
+        val_data = res_data.take(val_size)
+        train_data = res_data.skip(val_size)
+
+    else:
+        # 按照文件来切分数据集
+        file_cnt = len(filenames)
+        test_cnt, val_cnt = int(file_cnt * test_ratio), int(file_cnt * val_ratio)
+        test_files = filenames[: test_cnt]
+        filenames = filenames[test_cnt:]
+        val_files = filenames[: val_cnt]
+        train_files = filenames[val_cnt:]
+
+        test_files = tf.convert_to_tensor(test_files, dtype=tf.string)
+        val_files = tf.convert_to_tensor(val_files, dtype=tf.string)
+        train_files = tf.convert_to_tensor(train_files, dtype=tf.string)
+
+        data_list = []
+        for files_tmp in [train_files, test_files, val_files]:
+            dataset_tmp = tf.data.TFRecordDataset(files_tmp).map(parse_tfrecords) \
+                .padded_batch(batch_size=batch_size, padded_shapes=padded_shapes, drop_remainder=False)
+            data_list.append(dataset_tmp)
+        [train_data, test_data, val_data] = data_list
 
     return train_data, test_data, val_data
