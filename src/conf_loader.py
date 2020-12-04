@@ -1,9 +1,6 @@
 MODEL_DIR = "../model/bst_column"
-DATASET_DIR = "../dataset"
-DATA_DIR = "../data"
 
 # 预处理
-data_dir = "../data"
 indexing_dir = "../indexing"
 tfrecord_dir = "../tfrecord"
 click_seq_dir = "../click_seq_json"

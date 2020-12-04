@@ -1,3 +1,22 @@
+# 项目 
+这个项目是用于栏目智能排序的BST+DSSM模型的数据生成,预处理,训练和预测
+
+# 数据处理步骤
+1. `get_indexing.py`生成cid(vid)对应的视频序号(列表)
+2. `get_tfrecord.py`生成训练样本并存成TFRecord文件
+3. `get_dataset.py`生成训练样本的`tf.data.dataset`容器,用于训练
+
+> 2步中原始数据是用户的点击序列,如果点击的是栏目的话,元素格式为 <视频id>_<栏目id>;否则是 <视频id>
+# 训练 
+
+`train.py`训练并保存模型
+
+# 预测
+`infer.py`文件载入模型,读取用户的行为序列和栏目的视频序号列表来排序栏目,并将结果存入.json.gz文件
+
+# 环境部署
+`pip install -r requirements.txt`
+
 ### tensorflow2安装
 参考 https://tensorflow.google.cn/install?hl=zh-cn
 1. 使用python3.5–3.8
