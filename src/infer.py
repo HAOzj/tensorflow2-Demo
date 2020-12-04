@@ -14,16 +14,16 @@ import numpy as np
 from tqdm import tqdm
 import tensorflow as tf
 src_path = os.path.abspath("..")
-print(src_path)
 sys.path.append(src_path)
 from src.conf_loader import (
-    n_layer, emb_dim,
-    user_max_len, item_max_len,
-    MODEL_DIR, indexing_dir
+    n_layer, emb_dim, user_max_len, item_max_len,
+    batch_size, n_epoch,
+    MODEL_DIR, indexing_dir,
+    USER_PROFILE_FILE, OUTPUT_FILE,
+    COL_INFO_FILE, LAST_DIGITS
 )
-
-
-# filepath = os.path.join(MODEL_DIR, f"{user_max_len}_{item_max_len}_{emb_dim}_{batch_size}_{n_epoch}")
+from src.utils import print_run_time
+test_flag = False
 
 
 class LoadedModel(object):
@@ -43,6 +43,8 @@ class LoadedModel(object):
         self.metric = faiss.METRIC_INNER_PRODUCT
         self.index = None
         self.topK = None
+
+        self.cid2vidx_file = None
 
     def load_model(self, filepath):
         self.model = tf.keras.models.load_model(filepath, compile=False)
@@ -81,14 +83,19 @@ class LoadedModel(object):
             3. max pooling
             4. L-2归一化
         """
+
+        # [1, self.user_max_len, self.emb_dim]
         user_sequence_embeddings = self.user_embedding(user_inputs)
         for i in range(self.n_layer):
             user_sequence_embeddings = self.mha_user(user_sequence_embeddings)
+
+        # [1, 1, self.emb_dim]
         user_outputs_max = tf.nn.max_pool(
             user_sequence_embeddings,
             [1, self.user_max_len, 1],
             [1 for _ in range(len(user_sequence_embeddings.shape))],
             padding="VALID")
+
         user_normalized = tf.nn.l2_normalize(
             user_outputs_max, axis=2)
         return user_normalized
@@ -139,10 +146,73 @@ class LoadedModel(object):
         user_normalized = self.calc_user_vec(user_seq)
         return tf.reshape(user_normalized, shape=[1, -1])
 
-    def get_all_col_tensor(self, cid2vidx_file):
+    def _write_cid2vidx_file(self, vid2idx_file, col_info_file):
+        if vid2idx_file is None or col_info_file is None:
+            sys.exit("vid2idx_file is None or col_info_file is None")
+
+        with open(vid2idx_file, "r") as fp:
+            vid2idx = json.load(fp)
+
+        cid_list = []
+        cid2vidx = dict()
+        with open(col_info_file, "r") as fp:
+            column_cnt = 1
+            for line in fp:
+                column_cnt += 1
+                info = json.loads(line.strip("\r\t\n"))
+                column_id = str(info.get("column_id", "")).strip(" ")
+
+                if column_id == "" or column_id is None:
+                    print("------cid missed", line)
+                    continue
+                cid_list.append(column_id)
+
+                """混合频道的格式为
+                {
+                    "tab_name": str, "column_id": str, "source_id": str, "column_name": str, "client_type": "ct1,ct2",
+                    "vid_info": [<channel_id>\f<meizi_count>\f<cid1>\t<cid2>\t<cid3>,  ]
+                }
+                """
+                vid_info = info.get("vid_info", [])
+                if not vid_info:
+                    print("------", column_id, "vid_info missed")
+                    continue
+                vids = []
+                for item in vid_info:
+                    tuple3 = item.split("\f")
+                    if len(tuple3) != 3:
+                        print("------tuples3 missed", column_id)
+                        print("------", tuple3)
+                        continue
+                    vids += tuple3[2].split("\t")
+                vidx = [vid2idx[vid] for vid in vids if vid in vid2idx]
+                if column_id in cid2vidx:
+                    current = cid2vidx[column_id]
+                    nouveau = [vind for vind in vidx if vind not in current]
+                    vidx = current + nouveau
+                if vidx:
+                    cid2vidx[column_id] = vidx
+                else:
+                    print("------", column_id, "lacking valid cids", vids)
+        print(f"In total, {column_cnt} columns found, among which {len(set(cid_list))} are distinct")
+
+        if cid2vidx:
+            with open(self.cid2vidx_file, "w") as fp:
+                json.dump(cid2vidx, fp)
+            print(f"------succeed in writing cid2vidx, containing {len(cid2vidx)} columns")
+
+    def get_all_col_tensor(self, cid2vidx_file, vid2idx_file=None, col_info_file=None):
+        """ 计算得到每个栏目的向量
+
+        :param cid2vidx_file, path, 保存着 栏目 -> 对应的视频的序号列表
+        :param vid2idx_file, path, 保存着 视频id -> 序号 的
+        :param col_info_file, path, 保存着 栏目 -> 对应的视频id列表
         """
-        """
-        with open(cid2vidx_file, "r") as fp:
+        if self.cid2vidx_file is None:
+            self.cid2vidx_file = cid2vidx_file
+            self._write_cid2vidx_file(vid2idx_file, col_info_file)
+
+        with open(self.cid2vidx_file, "r") as fp:
             cid2vidx = json.load(fp)
 
         idx = 0
@@ -153,16 +223,7 @@ class LoadedModel(object):
             assert tensor.shape[-1] == self.emb_dim
             self.cid_vec_list.append(tensor)
             idx += 1
-        print(f"succeed in loading normalized vectors of {idx} items, by which I mean target columns")
-
-    # # TODO: 批量读取用户的行为序列来排序
-    # def save_rec(self, input_file, output_file, user_block_size=10 ** 5):
-    #     with gzip.open(output_file, "wb") as wf:
-    #         content = "\t".join(
-    #             [dnum, period, ",".join(rec_vids)]) + "\r\n"
-    #         content = content.encode()
-    #         wf.write(content)
-    #     return
+        print(f"------succeed in loading normalized vectors of {idx} items, by which I mean target columns")
 
     def init_faiss(self, xb=None, nlist=2):
         """ 初始化FAISS,把物品向量存起来
@@ -170,6 +231,10 @@ class LoadedModel(object):
         :param xb, 数据库中的向量
         :param nlist, 聚类的数量
         """
+        if not self.cid_vec_list:
+            print("please call `get_all_col_tensor method` first")
+            return
+
         # 量化器索引
         quantizer = faiss.IndexFlatIP(self.emb_dim)
 
@@ -189,33 +254,114 @@ class LoadedModel(object):
 
         :returns queries的最近的向量的距离和序号
         """
+        if self.index is None:
+            print("please call `init_faiss` first")
+            return
         if self.topK is None:
             self.topK = len(self.cid_list)
         return self.index.search(queries, self.topK)
 
+    @staticmethod
+    def write2file_from_sim(sim, dnum_list, cid_list, wf):
+        """ 根据相似度矩阵,把用户的推荐序列写入文件
+
+        :param sim, np.ndarray, 用户喝物品的相似矩阵,每行代表一个用户
+        :param dnum_list, iterable(str), 设备序列号的列表
+        :param cid_list, iterable(str), 栏目id的列表
+        :param wf, 输出文件的句柄
+        """
+        try:
+            assert sim.shape[1] == len(cid_list)
+        except AssertionError:
+            print(f"HZJ info: self.cid_list is of size {len(cid_list)} while sim is of shape {sim.shape}")
+            return
+
+        for i in range(sim.shape[0]):
+            ind = np.argsort(-sim[i, :], axis=-1)
+            rec_vids = [cid_list[idx] for idx in ind]
+            dnum = dnum_list[i]
+            content = "\t".join(
+                [dnum, "day", "1", ",".join(rec_vids)]) + "\r\n"
+            content = content.encode()
+            wf.write(content)
+
+    @print_run_time
+    def save_rec(self, input_file, output_file, user_block_size=10 ** 3):
+        if not self.cid_vec_list:
+            print("please call `get_all_col_tensor method` first")
+            return
+        col_mat = np.transpose(np.concatenate(self.cid_vec_list, axis=0))
+        user_cnt = 0
+        rest_flag = True
+        dnum_list = []
+        uvec_list = []
+        with gzip.open(output_file, "wb") as wf:
+            with gzip.open(input_file, "rb") as fp:
+                for line in fp:
+                    line = line.decode().strip("\r\t\n")
+                    info = json.loads(line)
+                    dnum = str(info.get("dnum", ""))
+
+                    if len(dnum) < 1:
+                        continue
+
+                    if dnum[-1] not in LAST_DIGITS:
+                        continue
+
+                    click_seq = info.get("click_seq", [])
+                    click_seq = list(map(int, click_seq))
+                    if len(click_seq) < 1:
+                        continue
+                    rest_flag = True
+                    user_cnt += 1
+
+                    dnum_list.append(dnum)
+                    user_vec = self.get_user_vec(click_seq)
+                    user_vec = np.array(user_vec)
+                    uvec_list.append(user_vec)
+
+                    if test_flag and user_cnt >= 100:
+                        break
+
+                    if user_cnt & user_block_size == 0:
+                        rest_flag = False
+                        user_mat = np.concatenate(uvec_list, axis=0)
+                        sim = np.matmul(user_mat, col_mat)
+                        self.write2file_from_sim(sim, dnum_list, self.cid_list, wf)
+                        dnum_list = []
+                        uvec_list = []
+
+            print("HZJ info: user_cnt = ", user_cnt)
+            if rest_flag and uvec_list:
+                user_mat = np.concatenate(uvec_list, axis=0)
+                sim = np.matmul(user_mat, col_mat)
+                self.write2file_from_sim(sim, dnum_list, self.cid_list, wf)
+
 
 def main():
+    filepath = os.path.join(MODEL_DIR, f"{user_max_len}_{item_max_len}_{emb_dim}_{batch_size}_{n_epoch}")
     model = LoadedModel()
-    model.load_model(filepath=MODEL_DIR)
+    model.load_model(filepath=filepath)
     cid2vidx_file = os.path.join(indexing_dir, "cid2vidx.json")
-    model.get_all_col_tensor(cid2vidx_file)
-
-    print("\n------FAISS inner product------")
-    model.init_faiss()
-    user_seq = [i for i in range(model.user_max_len - 1)]
-    user_vec = model.get_user_vec(user_seq)
-    user_vec = np.array(user_vec)
-    dist, ind = model.sort_by_faiss(queries=user_vec)
-    print("ind=", ind[0][:10])
-    print("dist=", dist[0][:10])
-
-    print("------numpy matmul------")
-    col_mat = np.concatenate(model.cid_vec_list, axis=0)
-    user_mat = user_vec
-    sim = np.matmul(user_mat, np.transpose(col_mat))
-    for i in range(sim.shape[0]):
-        print("ind=", np.argsort(-sim[i, :], axis=-1)[:10])
-        print("dist=", sorted(sim[i, :], reverse=True)[:10])
+    vid2idx_file = os.path.join(indexing_dir, "vid2idx.json")
+    model.get_all_col_tensor(cid2vidx_file, vid2idx_file, col_info_file=COL_INFO_FILE)
+    model.save_rec(input_file=USER_PROFILE_FILE, output_file=OUTPUT_FILE)
+    # print("\n------FAISS inner product------")
+    # model.init_faiss()
+    # user_seq = [i for i in range(model.user_max_len - 1)]
+    # user_vec = model.get_user_vec(user_seq)
+    # user_vec = np.array(user_vec)
+    # dist, ind = model.sort_by_faiss(queries=user_vec)
+    # print("ind=", ind[0][:10])
+    # print("dist=", dist[0][:10])
+    #
+    # print("------numpy matmul------")
+    # col_mat = np.concatenate(model.cid_vec_list, axis=0)
+    # user_mat = user_vec
+    # sim = np.matmul(user_mat, np.transpose(col_mat))
+    # for i in range(sim.shape[0]):
+    #     print("ind=", np.argsort(-sim[i, :], axis=-1)[:10])
+    #     print("dist=", sorted(sim[i, :], reverse=True)[:10])
 
 
 if __name__ == "__main__":
