@@ -58,9 +58,6 @@ class BST_DSSM(tf.keras.Model):
         self.user_max_len = user_max_len
         self.has_residual = has_residual
 
-        self.item_embedding = item_embedding
-        self.user_embedding = user_embedding
-
         self.mha_user = MultiHeadAttention(scope_name="user", embed_dim=self.emb_dim)
         self.mha_item = MultiHeadAttention(scope_name="item", embed_dim=self.emb_dim)
 
@@ -81,33 +78,6 @@ class BST_DSSM(tf.keras.Model):
 
         self.user_embedding = tf.keras.layers.Embedding(input_dim=self.vocab_size, output_dim=self.emb_dim)
         self.item_embedding = tf.keras.layers.Embedding(input_dim=self.vocab_size, output_dim=self.emb_dim)
-        # if self.user_embedding is None:
-        #     std = 0.1
-        #     minval = -std
-        #     maxval = std
-        #     self.user_embedding = tf.Variable(
-        #         tf.random.uniform(
-        #             [self.vocab_size, self.emb_dim],
-        #             minval, maxval,
-        #             seed=self.random_seed,
-        #             dtype=tf.float32),
-        #         name="user_embedding")
-        #
-        # if self.item_embedding is None:
-        #     std = 0.1
-        #     minval = -std
-        #     maxval = std
-        #     self.item_embedding = tf.Variable(
-        #         tf.random.uniform(
-        #             [self.vocab_size, self.emb_dim],
-        #             minval, maxval,
-        #             seed=self.random_seed,
-        #             dtype=tf.float32),
-        #         name="item_embedding")
-
-        # 参考 https://blog.csdn.net/ljx0951/article/details/106575502
-        # 引发bug: TypeError: Dimension value must be integer or None or have an __index__ method, got value '(None, 30)' with type '<class 'tuple'>'
-        # self._set_inputs(tf.TensorSpec([(None, item_max_len), (None, user_max_len)], [tf.float32, tf.float32]))
 
     @tf.function
     def call(self, inputs, training=True):
