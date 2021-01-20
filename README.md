@@ -86,5 +86,79 @@ dataset = dataset.batch(2)
 take(2)  # 前2个batch,共4个sample
 ```
 
+- tensorflow2.3.1`load_model`后模型的一些部分缺损,报错
+`ValueError: Could not find matching function to call loaded from the SavedModel`
+
+subclassed model适合用保存权重的方式.  
+- 因为`saved_model`对于subclassed model保存的是`call`函数,不方便序列化.尤其是自定的`call`方法参数不是`inputs`和`training`时
+- 对functional或sequential model保存的是data structure
+
+> 参考 https://stackoverflow.com/questions/58339137/tensorflow-2-0-save-and-load-a-model-that-contains-a-lstm-layer-while-the-load
+
+# tensorflow2的技巧
+### 查看梯度  
+eager execution下要用`tf.GradientTape`
+
+```python
+import tensorflow as tf 
+  
+x = tf.constant(4.0) 
+  
+# Using GradientTape 
+with tf.GradientTape() as gt: 
+    gt.watch(x) 
+    y = x * x * x 
+  
+# Computing first order gradient 
+first_order = gt.gradient(y, x) 
+  
+# Computing Second order gradient 
+second_order  = gt.gradient(first_order, x)  
+  
+# Printing result 
+print("first_order: ", first_order) 
+print("second_order: ", second_order) 
+```
+
+### 自定义Layer
+`call`方法最好有`inputs`和`training`参数
+
+### 查看模型中的变量
+
+- 如果是`tf.Variable`,则用`read_value()`
+- 如果是`tf.keras.layers.Layer`,则用`get_weights()`
+
+```python 
+import tensorlfow as tf 
+model = tf.keras.models.load_model(filepath)
+embeddings = model.tag_embedding
+
+# tf.Variable
+tag_mat = tag_embedding.read_value().numpy().tolist()
+
+# tf.keras.layers.Layer
+wk = model.attn_list[0].Wk.get_weights()[0].tolist()
+```
+
+
+### 载入模型时有自定的函数
+用`custom_objects`参数
+
+```python 
+import tensorlfow as tf 
+model = tf.keras.models.load_model(filepath, custom_objects={"loss_fn": loss_fn})
+```
+
+### 制作mask
+
+```python
+import tensorflow as tf
+import numpy as np 
+item_inputs = np.random.randint(low=0, high=100, size=(20, 20)).astype(dtype=float)
+one_item = tf.ones_like(item_inputs, dtype=tf.float32)
+zero_item = tf.zeros_like(item_inputs, dtype=tf.float32)
+item_mask = tf.where(item_inputs == 0, x=one_item, y=zero_item)
+```
+
 
 
