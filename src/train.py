@@ -16,11 +16,12 @@ sys.path.append(src_path)
 from src.model import BST_DSSM as Model
 from src.get_dataset import load_data
 from src.conf_loader import (
- MODEL_DIR, tfrecord_dir, MODEL_WEIGHT_DIR,
+ MODEL_DIR, tfrecord_dir, MODEL_WEIGHT_DIR, FIT_LOGS_DIR,
  user_max_len, item_max_len,
  n_epoch, batch_size, test_ratio, val_ratio
 )
 from src.utils import (print_run_time, NBatchLogger)
+import tensorflow as tf
 
 
 class Break(Exception):
@@ -50,13 +51,16 @@ def train(k=100, log_file="loss_on_val.txt"):
             y_train = mini_batch["label"]
             return x_train, y_train
 
+        # 每k个batch输出损失以及tensorboard的callback
         callbacks = NBatchLogger(k)
+        tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=FIT_LOGS_DIR, histogram_freq=1)
+
         for epoch in range(n_epoch):
             # 喂入generator可以用多进程
             model.fit(
                 x=train_data.map(convert2input),
                 verbose=2,
-                callbacks=[callbacks],
+                callbacks=[callbacks, tensorboard_callback],
                 shuffle=True,
                 workers=4,
                 use_multiprocessing=True)

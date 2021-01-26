@@ -178,4 +178,14 @@ model.fit(
 
 > 请参看 https://www.tensorflow.org/guide/keras/custom_callback
 
+### tensorboard
+用`model.fit`的`callbackss`参数,请参看`train.py`文件
+```
+tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=FIT_LOGS_DIR, histogram_freq=1)
+```
+查看的话
+```shell
+tensorboard --logdir fit_logs
+```
+> 请参看 https://zhuanlan.zhihu.com/p/84215973
 
