@@ -40,7 +40,7 @@ def parse_tfrecords(serialized_example):
     return res
 
 
-def load_data(tfrecord_dir, user_max_len, item_max_len, batch_size, test_ratio, val_ratio, strict_flag=False):
+def load_data(tfrecord_dir, user_max_len, item_max_len, batch_size, test_ratio, val_ratio, strict_flag=False, num_parallel_calls=tf.data.experimental.AUTOTUNE):
     """从tfrecord文件中解析样例,生成训练集,测试集和预测集
 
     :param tfrecord_dir, path, TFRecord文件所在的文件夹
@@ -50,6 +50,7 @@ def load_data(tfrecord_dir, user_max_len, item_max_len, batch_size, test_ratio, 
     :param test_ratio, float, 测试集的占比
     :param val_ratio, float, 发展集的占比
     :param strict_flag, bool, 是否把数据集全部shuffle后分割.对于大数据量,建议为False
+    :param num_parallel_calls, int, 多线程的数量
     :return:
     """
     padded_shapes = {"user_feature": [user_max_len], "item_feature": [item_max_len], "label": [1]}
@@ -98,7 +99,11 @@ def load_data(tfrecord_dir, user_max_len, item_max_len, batch_size, test_ratio, 
         data_list = []
         for files_tmp in [train_files, test_files, val_files]:
             dataset_tmp = tf.data.TFRecordDataset(files_tmp).map(parse_tfrecords) \
-                .padded_batch(batch_size=batch_size, padded_shapes=padded_shapes, drop_remainder=False)
+                .padded_batch(
+                batch_size=batch_size,
+                padded_shapes=padded_shapes,
+                drop_remainder=False,
+                num_parallel_calls=num_parallel_calls)
             data_list.append(dataset_tmp)
         [train_data, test_data, val_data] = data_list
 
