@@ -3,12 +3,14 @@
 """
 Created on 25 Nov, 2020
 
+Updated on 26 Jan, 2021
+
 Author: woshihaozhaojun@sina.com
 """
 import cProfile
 import pstats
 import time
-import os
+from tensorflow.keras.callbacks import Callback
 
 
 def do_cprofile(filename):
@@ -43,3 +45,18 @@ def print_run_time(func):
         return res
 
     return wrapper
+
+
+class NBatchLogger(Callback):
+    def __init__(self, display, time_flag=False):
+        self.seen = 0
+        self.display = display
+        self.start_time = time.time()
+        self.time_flag = time_flag
+
+    def on_batch_end(self, batch, logs=None):
+        if batch % self.display == 0:
+            line = f"""For batch {batch}, loss is {logs["loss"]}"""
+            if self.time_flag:
+                line += f"time elapsed {(time.time() - self.start_time) / 60} mins"
+            print(line)

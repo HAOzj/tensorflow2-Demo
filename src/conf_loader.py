@@ -1,4 +1,5 @@
 MODEL_DIR = "../model/bst_column"
+MODEL_WEIGHT_DIR = "../model_weight/bst_column"
 
 # 预处理
 indexing_dir = "../indexing"

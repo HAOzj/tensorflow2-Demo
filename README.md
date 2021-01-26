@@ -160,5 +160,22 @@ zero_item = tf.zeros_like(item_inputs, dtype=tf.float32)
 item_mask = tf.where(item_inputs == 0, x=one_item, y=zero_item)
 ```
 
+### 训练时用多进程加速
+请参看`train.py`文件
+```python
+# train_data是一个generator
+model.fit(
+    x=train_data,
+    verbose=2,
+    shuffle=True,
+    workers=4,
+    use_multiprocessing=True) 
+```
+
+### 每一些batches后输出损失
+用`model.fit`的`callbackss`参数,请参看`train.py`文件
+
+
+> 请参看 https://www.tensorflow.org/guide/keras/custom_callback
 
 
