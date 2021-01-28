@@ -37,6 +37,28 @@ def parse_tfrecords(serialized_example):
     res["user_feature"] = user_feature
     res["item_feature"] = item_feature
     res["label"] = label
+
+    """如果tfrecord存的是定长
+        context_features = {
+        "label": tf.io.FixedLenFeature([1], dtype=tf.float32),
+        "user_feature": tf.io.FixedLenFeature([user_max_len], dtype=tf.int64),
+        "item_feature": tf.io.FixedLenFeature([item_max_len], dtype=tf.int64)
+    }
+
+    # 一次仅仅解析一条样本example
+    parsed = tf.io.parse_single_example(
+        serialized=serialized_example,
+        features=context_features)
+    user_feature = parsed["user_feature"]
+    item_feature = parsed["item_feature"]
+
+    label = parsed["label"]
+
+    res = dict()
+    res["user_feature"] = user_feature
+    res["item_feature"] = item_feature
+    res["label"] = label
+    """
     return res
 
 

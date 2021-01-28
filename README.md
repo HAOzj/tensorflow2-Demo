@@ -96,6 +96,14 @@ subclassed model适合用保存权重的方式.
 > 参考 https://stackoverflow.com/questions/58339137/tensorflow-2-0-save-and-load-a-model-that-contains-a-lstm-layer-while-the-load
 
 # tensorflow2的技巧
+### 处理变长的特征
+目前实践了两种方法
+
+| tfrecord写入相关 | tfrecord解析相关 | tfrecord文件是否补全| 备注 |
+| ---- | -----| ----| ----|
+|用`tf.train.SequenceExample` |  `tf.io.parse_sequence_example`, 返回三个字典 | 否 |参看文件中用法 |
+|用`tf.train.Example` | `tf.io.parse_single_example`, 返回一个字典 | 是| 参看文件中注释掉的用法 |
+
 ### 查看梯度  
 eager execution下要用`tf.GradientTape`
 
@@ -185,7 +193,7 @@ tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=FIT_LOGS_DIR, hist
 ```
 查看的话
 ```shell
-tensorboard --logdir fit_logs
+tensorboard --logdir <FIT_LOGS_DIR>
 ```
 > 请参看 https://zhuanlan.zhihu.com/p/84215973
 

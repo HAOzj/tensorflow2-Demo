@@ -105,6 +105,22 @@ def write_example(user_seq, item_seq, label, writer):
         })
     )
 
+    """ 存成定长序列
+    if len(user_seq) < user_max_len:
+        user_seq = user_seq + [0 for _ in range(user_max_len - len(user_seq))]
+    if len(item_seq) < item_max_len:
+        item_seq = item_seq + [0 for _ in range(item_max_len - len(item_seq))]
+
+    seq_example = tf.train.Example(
+        # context 来放置非序列化部分
+        features=tf.train.Features(feature={
+            "label": tf.train.Feature(float_list=tf.train.FloatList(value=[label])),
+            "user_feature": tf.train.Feature(int64_list=tf.train.Int64List(value=user_seq)),
+            "item_feature": tf.train.Feature(int64_list=tf.train.Int64List(value=item_seq))
+        })
+    )
+    """
+
     serialized = seq_example.SerializeToString()
     writer.write(serialized)
 
