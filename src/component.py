@@ -47,12 +47,12 @@ class MultiHeadAttention(tf.keras.layers.Layer):
             gamma_initializer="ones",
             name=f"{scope_name}_ln")
 
-    def call(self, inputs):
+    def call(self, inputs, training=None, src_mask=None):
         """多头注意力模型
 
-        :param queries: of shape [batch_size, max_length, emb_dim]
-        :param keys_:  of shape [batch_size, max_length, emb_dim]
-        :param values: of shape [batch_size, max_length, emb_dim]
+        :param inputs: 输入变量
+        :param training: call的默认参数
+        :param src_mask: binary matrix, src_mask
         :return:
         """
         assert inputs.get_shape().as_list()[-1] == self.embed_dim
@@ -71,6 +71,10 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         # Multiplication
         # [batch_size * num_heads, max_length, max_length]
         weights = tf.matmul(Q_, tf.transpose(K_, [0, 2, 1]))
+        if src_mask is not None:
+            def masked_fill(t, mask, value):
+                return t * (1 - tf.cast(mask, tf.float32)) + value * tf.cast(mask, tf.float32)
+            weights = masked_fill(weights, src_mask, -1e9)
 
         # Scale
         weights = weights / (K_.get_shape().as_list()[-1] ** 0.5)

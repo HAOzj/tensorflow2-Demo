@@ -87,17 +87,25 @@ class BST_DSSM(tf.keras.Model):
 
         # 用户和物品各用一个lut,类似DSSM中的双塔
         # 维度变成[batch_size, max_length, emb_dim]
-        # item_sequence_embeddings = tf.nn.embedding_lookup(
-        #     self.item_embedding, item_inputs, name="item_sequence_embeddings")
-        # user_sequence_embeddings = tf.nn.embedding_lookup(
-        #     self.user_embedding, user_inputs, name="user_sequence_embeddings")
         item_sequence_embeddings = self.item_embedding(item_inputs)
         user_sequence_embeddings = self.user_embedding(user_inputs)
 
+        # mask
+        item_mask = tf.where(
+            item_inputs == 0,
+            x=tf.ones_like(item_inputs, dtype=tf.float32),
+            y=tf.zeros_like(item_inputs, dtype=tf.float32))
+        item_mask = tf.expand_dims(item_mask, axis=-1)
+        user_mask = tf.where(
+            user_inputs == 0,
+            x=tf.ones_like(user_inputs, dtype=tf.float32),
+            y=tf.zeros_like(user_inputs, dtype=tf.float32))
+        user_mask = tf.expand_dims(user_mask, axis=-1)
+
         # 维度变成[batch_size, max_length, 16]
         for i in range(self.blocks):
-            item_sequence_embeddings = self.mha_item(item_sequence_embeddings)
-            user_sequence_embeddings = self.mha_user(user_sequence_embeddings)
+            item_sequence_embeddings = self.mha_item(item_sequence_embeddings, src_mask=item_mask)
+            user_sequence_embeddings = self.mha_user(user_sequence_embeddings, src_mask=user_mask)
 
         # 最大池化层, 维度变成[batch_size, 1, 16]
         item_outputs_max = tf.nn.max_pool(
@@ -133,6 +141,12 @@ class BST_DSSM(tf.keras.Model):
             cross_entropy += _regularizer(self.user_embedding)
             cross_entropy += _regularizer(self.item_embedding)
         return cross_entropy
+
+    def focal_loss(self, target, output):
+        target = tf.reshape(target, [-1, 1])
+        y = tf.multiply(output, target) + tf.multiply(1 - output, 1 - target)
+        loss = tf.pow(1. - y, self.gamma) * tf.math.log(y + self.epsilon)
+        return - tf.reduce_mean(loss)
 
 
 def debug():
