@@ -158,7 +158,6 @@ model = tf.keras.models.load_model(filepath, custom_objects={"loss_fn": loss_fn}
 ```
 
 ### 制作mask
-
 ```python
 import tensorflow as tf
 import numpy as np 
@@ -167,9 +166,10 @@ one_item = tf.ones_like(item_inputs, dtype=tf.float32)
 zero_item = tf.zeros_like(item_inputs, dtype=tf.float32)
 item_mask = tf.where(item_inputs == 0, x=one_item, y=zero_item)
 ```
+> 最好直接在tfrecord或者dataset中生成,节省训练时间
 
 ### 训练时用多进程加速
-请参看`train.py`文件
+数据必须是生成器或者`Sequence`,请参看`train.py`文件
 ```python
 # train_data是一个generator
 model.fit(
@@ -180,7 +180,7 @@ model.fit(
     use_multiprocessing=True) 
 ```
 
-### 每一些batches后输出损失
+### 每一些batches和epoch后输出损失等信息
 用`model.fit`的`callbackss`参数,请参看`train.py`文件
 
 
