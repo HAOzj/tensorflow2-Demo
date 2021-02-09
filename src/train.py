@@ -9,8 +9,7 @@ Author : woshihaozhaojun@sina.com
 """
 import os
 import sys
-import numpy as np
-from sklearn.metrics import roc_auc_score
+import time
 src_path = os.path.abspath("..")
 sys.path.append(src_path)
 from src.model import BST_DSSM as Model
@@ -20,7 +19,7 @@ from src.conf_loader import (
  user_max_len, item_max_len,
  n_epoch, batch_size, test_ratio, val_ratio
 )
-from src.utils import (print_run_time, NBatchLogger)
+from src.utils import (print_run_time, NBatchLogger, get_all_metrics)
 import tensorflow as tf
 
 
@@ -42,10 +41,21 @@ def train(k=100, log_file="loss_on_val.txt"):
     model.build(input_shape=[(None, item_max_len), (None, user_max_len)])
 
     losses_val = [1 for _ in range(2)]
+    start_time = time.time()
 
-    fp = open(log_file, "w")
+    """生成发展集的dataset
+    
+    分为输入和标签
+    """
+    def convert2input_x(mini_batch):
+        return mini_batch["item_feature"], mini_batch["user_feature"]
+
+    def convert2input_y(mini_batch):
+        return mini_batch["label"]
+
+    val_x, val_y = val_data.map(convert2input_x), val_data.map(convert2input_y)
+    
     try:
-
         def convert2input(mini_batch):
             x_train = (mini_batch["item_feature"], mini_batch["user_feature"])
             y_train = mini_batch["label"]
@@ -71,26 +81,10 @@ def train(k=100, log_file="loss_on_val.txt"):
             #     batch_num += 1
             #     model.fit(x_train, y_train)
 
-            y_pred_val, y_true_val = [], []
-            loss_val = 0
-            sample_size_val = 0
-            for batch_tmp in val_data.as_numpy_iterator():
-                x_tmp = (batch_tmp["item_feature"], batch_tmp["user_feature"])
-                y_tmp = batch_tmp["label"]
-                pred_tmp = model.predict(x_tmp)
-                y_pred_val.append(pred_tmp)
-                y_true_val.append(y_tmp)
-                loss_val += np.sum(model.loss_fn(y_tmp, pred_tmp))
-                sample_size_val += x_tmp[0].shape[0]
-            pred = np.concatenate(y_pred_val)
-            y_val = np.concatenate(y_true_val)
-
-            loss_val /= sample_size_val
-            auc = roc_auc_score(y_val, pred)
-            # loss_val = model.evaluate(val_data_generator(val_data), verbose=True)
-            line = f"Epoch {epoch}, loss on val set is {round(loss_val, 5)}, auc is {round(auc, 5)}"
-            print(line)
-            fp.write(line+"\n")
+            loss_val = get_all_metrics(
+                model=model, epoch=epoch,
+                val_x=val_x, val_y=val_y,
+                start_time=start_time, loss_fn=model.loss_fn)
             losses_val.append(loss_val)
 
             if losses_val[-1] >= losses_val[-2] >= losses_val[-3]:
@@ -110,7 +104,6 @@ def train(k=100, log_file="loss_on_val.txt"):
                         f"{user_max_len}_{item_max_len}_{model.emb_dim}_{batch_size}_{epoch}"))
     except Break as e:
         print(e)
-    fp.close()
 
 
 def main():
