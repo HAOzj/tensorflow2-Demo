@@ -54,7 +54,7 @@ def train(k=100, log_file="loss_on_val.txt"):
         return mini_batch["label"]
 
     val_x, val_y = val_data.map(convert2input_x), val_data.map(convert2input_y)
-    
+
     try:
         def convert2input(mini_batch):
             x_train = (mini_batch["item_feature"], mini_batch["user_feature"])
