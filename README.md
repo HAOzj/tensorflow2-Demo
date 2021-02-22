@@ -17,6 +17,13 @@
 # 环境部署
 `pip install -r requirements.txt`
 
+# serving
+只要把模型保存成可序列化的格式,就可以用tf serving来提供rpc和RESTFul服务.
+需要注意的是,`subclassed model`如果`save`,需要保证`call`方法的入参首先为`inputs, training`且`save_format="tf"`
+
+以我们的模型为例,访问请求时,`input_1`和`input_2`分别表示用户和物品序列,为2-d数组.请求参数具体形式可以通过`curl http://localhost:<端口号>/v1/models/<模型名字>/metadata`来查看
+> 参考 https://blog.csdn.net/JerryZhang__/article/details/85107506.
+
 ### tensorflow2安装
 参考 https://tensorflow.google.cn/install?hl=zh-cn
 1. 使用python3.5–3.8
